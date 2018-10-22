@@ -1,0 +1,9 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea/
+DRIVE/
+DRIVE_datasets_training_testing/
+log/
+neuron/
+STARE/
+STARE_datasets_training_testing/
+vis_predict.py
