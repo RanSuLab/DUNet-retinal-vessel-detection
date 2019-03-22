@@ -117,60 +117,6 @@ def pred_to_imgs(pred, patch_height, patch_width, mode="original"):
     return pred_images
 
 
-def dense_crf(img, output_probs):
-    import pydensecrf.densecrf as dcrf
-    from pydensecrf.utils import unary_from_softmax
-    h = output_probs.shape[0]
-    w = output_probs.shape[1]
-
-    output_probs = np.expand_dims(output_probs, 0)
-    output_probs = np.append(1 - output_probs, output_probs, axis=0)
-
-    d = dcrf.DenseCRF2D(w, h, 2)
-    U = -np.log(output_probs)
-    U = U.reshape((2, -1))
-    U = np.ascontiguousarray(U)
-    # U = unary_from_softmax(output_probs)
-    img = np.ascontiguousarray(img)
-    U = U.astype(np.float32)
-    d.setUnaryEnergy(U)
-
-    # This adds the color-independent term, features are the locations only.
-    d.addPairwiseGaussian(sxy=0.1, compat=0.1, kernel=dcrf.DIAG_KERNEL, normalization=dcrf.NORMALIZE_SYMMETRIC)
-
-    # This adds the color-dependent term, i.e. features are (x,y,r,g,b).
-    d.addPairwiseBilateral(sxy=0.1, srgb=0.1, rgbim=img.astype(np.uint8), compat=10, kernel=dcrf.DIAG_KERNEL,
-                           normalization=dcrf.NORMALIZE_SYMMETRIC)
-
-    Q = d.inference(10)
-    Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
-
-    return Q
-
-def dense_crf_no_rgb(img, output_probs):
-    import pydensecrf.densecrf as dcrf
-    from pydensecrf.utils import create_pairwise_bilateral,unary_from_softmax
-    h = output_probs.shape[0]
-    w = output_probs.shape[1]
-
-    output_probs = np.expand_dims(output_probs, 0)
-    output_probs = np.append(1 - output_probs, output_probs, axis=0)
-
-    d = dcrf.DenseCRF2D(w, h, 2)
-    # U = -np.log(output_probs)
-    # U = U.reshape((2, -1))
-    # U = np.ascontiguousarray(U)
-    U = unary_from_softmax(output_probs)
-    pairwise_energy = create_pairwise_bilateral(sdims=(1, 1), schan=(0.01,), img=img)
-    U = U.astype(np.float32)
-    d.setUnaryEnergy(U)
-    d.addPairwiseEnergy(pairwise_energy, compat=10)
-    Q, tmp1, tmp2 = d.startInference()
-    for _ in range(5):
-        d.stepInference(Q, tmp1, tmp2)
-    Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
-    return Q
-
 
 def get_layer_outputs(test_image, model):
     outputs = [layer.output for layer in model.layers]  # all layer outputs

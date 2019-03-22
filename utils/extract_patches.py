@@ -75,7 +75,7 @@ def get_data_testing_overlap_ex(test_imgs_original, Imgs_to_test, patch_height, 
 
 # Load the original data and return the extracted patches for testing
 # return the ground truth in its original shape
-def get_data_testing_overlap(test_imgs_original, test_groudTruth, Imgs_to_test, patch_height, patch_width,
+def get_data_testing_overlap(test_imgs_original, test_groudTruth, patch_height, patch_width,
                              stride_height, stride_width):
     ### test
     test_imgs_original = load_hdf5(test_imgs_original)
@@ -84,8 +84,50 @@ def get_data_testing_overlap(test_imgs_original, test_groudTruth, Imgs_to_test, 
     test_imgs = my_PreProc(test_imgs_original)
     test_masks = test_masks / 255.
     # extend both images and masks so they can be divided exactly by the patches dimensions
-    test_imgs = test_imgs[0:Imgs_to_test, :, :, :]
-    test_masks = test_masks[0:Imgs_to_test, :, :, :]
+    # test_imgs = test_imgs[15:30, :, :, :]
+    # test_masks = test_masks[15:30, :, :, :]
+    test_imgs = paint_border_overlap(test_imgs, patch_height, patch_width, stride_height, stride_width)
+
+    # check masks are within 0-1
+    assert (np.max(test_masks) == 1 and np.min(test_masks) == 0)
+
+    print("\ntest images shape:")
+    print(test_imgs.shape)
+    print("\ntest mask shape:")
+    print(test_masks.shape)
+    print("test images range (min-max): " + str(np.min(test_imgs)) + ' - ' + str(np.max(test_imgs)))
+    print("test masks are within 0-1\n")
+
+    # extract the TEST patches from the full images
+    patches_imgs_test = extract_ordered_overlap(test_imgs, patch_height, patch_width, stride_height, stride_width)
+
+    print("\ntest PATCHES images shape:")
+    print(patches_imgs_test.shape)
+    print("test PATCHES images range (min-max): " + str(np.min(patches_imgs_test)) + ' - ' + str(
+        np.max(patches_imgs_test)))
+    patches_imgs_test = np.transpose(patches_imgs_test, (0, 2, 3, 1))
+    test_masks = np.transpose(test_masks, (0, 2, 3, 1))
+    return patches_imgs_test, test_imgs.shape[2], test_imgs.shape[3], test_masks
+
+
+# Load the original data and return the extracted patches for testing
+# return the ground truth in its original shape
+def get_data_testing_overlap_stare(test_imgs_original, test_groudTruth, patch_height, patch_width,
+                                   stride_height, stride_width, imgidx=0):
+    ### test
+    test_imgs_original = load_hdf5(test_imgs_original)
+    test_masks = load_hdf5(test_groudTruth)
+
+    test_imgs = my_PreProc(test_imgs_original)
+    test_masks = test_masks / 255.
+    print('index: ' + str(imgidx))
+    print('STARE original shape:')
+    test_imgs = test_imgs[imgidx:imgidx + 1, ...]
+    test_masks = test_masks[imgidx:imgidx + 1, ...]
+
+    # extend both images and masks so they can be divided exactly by the patches dimensions
+    # test_imgs = test_imgs[0:Imgs_to_test, :, :, :]
+    # test_masks = test_masks[0:Imgs_to_test, :, :, :]
     test_imgs = paint_border_overlap(test_imgs, patch_height, patch_width, stride_height, stride_width)
 
     # check masks are within 0-1
@@ -115,26 +157,29 @@ def get_data_training(train_imgs_original,
                       patch_height,
                       patch_width,
                       N_subimgs,
-                      inside_FOV, dataset,
-                      path_experiment, fcn=True):
+                      inside_FOV,
+                      fcn=True):
     train_imgs_original = load_hdf5(train_imgs_original)
     train_masks = load_hdf5(train_groudTruth)  # masks always the same
 
-    visualize(group_images(train_imgs_original[:, :, :, :], 5),
-              path_experiment + 'imgs_train')  # check original imgs train
+    # visualize(group_images(train_imgs_original[:, :, :, :], 5),
+    #           path_experiment + 'imgs_train')
 
     # TODO: preprocessing
     train_imgs = my_PreProc(train_imgs_original)
     train_masks = train_masks / 255.
-    if dataset == 'DRIVE':
-        train_imgs = train_imgs[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
-        train_masks = train_masks[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
-    elif dataset == 'STARE':
-        train_imgs = train_imgs[:, :, :, 15:685]
-        train_masks = train_masks[:, :, :, 15:685]
-    else:
-        train_imgs = train_imgs[:, :, :, 19:979]
-        train_masks = train_masks[:, :, :, 19:979]
+    # if dataset == 'DRIVE':
+    #     train_imgs = train_imgs[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
+    #     train_masks = train_masks[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
+    # elif dataset == 'STARE':
+    #     train_imgs = train_imgs[:, :, :, 15:685]
+    #     train_masks = train_masks[:, :, :, 15:685]
+    # elif dataset == 'CHASE':
+    #     train_imgs = train_imgs[:, :, :, 19:979]
+    #     train_masks = train_masks[:, :, :, 19:979]
+    # elif dataset == 'HRF':
+    #     train_imgs = train_imgs[:, :, :, 19:979]
+    #     train_masks = train_masks[:, :, :, 19:979]
     data_consistency_check(train_imgs, train_masks)
 
     # check masks are within 0-1
@@ -147,13 +192,80 @@ def get_data_training(train_imgs_original,
 
     # extract the TRAINING patches from the full images
     if fcn:
-        patches_imgs_train, patches_masks_train = extract_random_patches(train_imgs_original, train_imgs, train_masks,
+        patches_imgs_train, patches_masks_train = extract_random_patches(train_imgs, train_masks,
                                                                          patch_height, patch_width,
                                                                          N_subimgs,
                                                                          inside=inside_FOV)
         data_consistency_check(patches_imgs_train, patches_masks_train)
     else:
-        patches_imgs_train, patches_masks_train = extract_random(train_imgs_original, train_imgs, train_masks,
+        patches_imgs_train, patches_masks_train = extract_random(train_imgs, train_masks,
+                                                                 patch_height, patch_width,
+                                                                 N_subimgs,
+                                                                 inside=inside_FOV)
+    ##Fourier transform of patches
+    # TODO add hessian grangi
+    # patches_imgs_train = my_PreProc_patches(patches_imgs_train)
+    print("\ntrain PATCHES images/masks shape:")
+    print(patches_imgs_train.shape)
+    print("train PATCHES images range (min-max): " + str(np.min(patches_imgs_train)) + ' - ' + str(
+        np.max(patches_imgs_train)))
+
+    return patches_imgs_train, patches_masks_train  # , patches_imgs_test, patches_masks_test
+
+
+def get_data_training_stare(train_imgs_original,
+                            train_groudTruth,
+                            patch_height,
+                            patch_width,
+                            N_subimgs,
+                            inside_FOV, imgidx=0,
+                            fcn=True):
+    train_imgs_original = load_hdf5(train_imgs_original)
+    train_masks = load_hdf5(train_groudTruth)  # masks always the same
+    print('index: ' + str(imgidx))
+    print('STARE original shape:')
+    print(train_imgs_original.shape)
+    train_imgs_original = np.delete(train_imgs_original, imgidx, axis=0)
+    train_masks = np.delete(train_masks, imgidx, axis=0)
+    print('STARE deleted ' + str(imgidx) + 'shape')
+    print(train_imgs_original.shape)
+    # visualize(group_images(train_imgs_original[:, :, :, :], 5),
+    #           path_experiment + 'imgs_train')
+
+    # TODO: preprocessing
+    train_imgs = my_PreProc(train_imgs_original)
+    train_masks = train_masks / 255.
+    # if dataset == 'DRIVE':
+    #     train_imgs = train_imgs[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
+    #     train_masks = train_masks[:, :, 9:574, :]  # cut bottom and top so now it is 565*565
+    # elif dataset == 'STARE':
+    #     train_imgs = train_imgs[:, :, :, 15:685]
+    #     train_masks = train_masks[:, :, :, 15:685]
+    # elif dataset == 'CHASE':
+    #     train_imgs = train_imgs[:, :, :, 19:979]
+    #     train_masks = train_masks[:, :, :, 19:979]
+    # elif dataset == 'HRF':
+    #     train_imgs = train_imgs[:, :, :, 19:979]
+    #     train_masks = train_masks[:, :, :, 19:979]
+    data_consistency_check(train_imgs, train_masks)
+
+    # check masks are within 0-1
+    assert (np.min(train_masks) == 0 and np.max(train_masks) == 1)
+
+    print("\ntrain images/masks shape:")
+    print(train_imgs.shape)
+    print("train images range (min-max): " + str(np.min(train_imgs)) + ' - ' + str(np.max(train_imgs)))
+    print("train masks are within 0-1\n")
+
+    # extract the TRAINING patches from the full images
+    if fcn:
+        patches_imgs_train, patches_masks_train = extract_random_patches(train_imgs, train_masks,
+                                                                         patch_height, patch_width,
+                                                                         N_subimgs,
+                                                                         inside=inside_FOV)
+        data_consistency_check(patches_imgs_train, patches_masks_train)
+    else:
+        patches_imgs_train, patches_masks_train = extract_random(train_imgs, train_masks,
                                                                  patch_height, patch_width,
                                                                  N_subimgs,
                                                                  inside=inside_FOV)
@@ -170,7 +282,7 @@ def get_data_training(train_imgs_original,
 
 # extract patches randomly in the full training images
 #  -- Inside OR in full image balance
-def extract_random(orgion_images, full_imgs, full_masks, patch_h, patch_w, N_patches,
+def extract_random(full_imgs, full_masks, patch_h, patch_w, N_patches,
                    inside=True):
     if (N_patches % full_imgs.shape[0] != 0):
         print("N_patches: plase enter a multiple of ", full_imgs.shape[0])
@@ -201,6 +313,7 @@ def extract_random(orgion_images, full_imgs, full_masks, patch_h, patch_w, N_pat
             # print "y_center " +str(y_center)
             # check whether the patch is fully contained in the FOV
             if inside == True:
+                # only for drive
                 if is_patch_inside_FOV(x_center, y_center, img_w, img_h, patch_h) == False:
                     continue
                     # print "y_center " +str(y_center)
@@ -220,7 +333,7 @@ def extract_random(orgion_images, full_imgs, full_masks, patch_h, patch_w, N_pat
 
 # extract patches randomly in the full validation images
 #  -- Inside OR in full image
-def extract_random_patches(orgion_images, full_imgs, full_masks, patch_h, patch_w, N_patches, inside=True):
+def extract_random_patches(full_imgs, full_masks, patch_h, patch_w, N_patches, inside=True):
     if (N_patches % full_imgs.shape[0] != 0):
         print("N_patches: plase enter a multiple of ", full_imgs.shape[0])
         exit()
@@ -248,9 +361,10 @@ def extract_random_patches(orgion_images, full_imgs, full_masks, patch_h, patch_
             y_center = np.random.randint(low=0 + int(patch_h / 2), high=img_h - int(patch_h / 2))
             # print "y_center " +str(y_center)
             # check whether the patch is fully contained in the FOV
-            if inside == True:
-                if is_patch_inside_FOV(x_center, y_center, img_w, img_h, patch_h) == False:
-                    continue
+            # if inside == True:
+            # only for drive
+            # if is_patch_inside_FOV(x_center, y_center, img_w, img_h, patch_h) == False:
+            #     continue
             patch = full_imgs[i, :, y_center - int(patch_h / 2):y_center + int(patch_h / 2),
                     x_center - int(patch_w / 2):x_center + int(patch_w / 2)]
             patch_mask = full_masks[i, :, y_center - int(patch_h / 2):y_center + int(patch_h / 2),
@@ -454,7 +568,7 @@ def extract_ordered_overlap(full_imgs, patch_h, patch_w, stride_h, stride_w):
 
 
 # return only the pixels contained in the FOV, for both images and masks
-def pred_only_FOV(data_imgs, data_masks, original_imgs_border_masks=None):
+def pred_only_FOV(data_imgs, data_masks, original_imgs_border_masks=None, insideFOV=True):
     assert (len(data_imgs.shape) == 4 and len(data_masks.shape) == 4)  # 4D arrays
     assert (data_imgs.shape[0] == data_masks.shape[0])
     assert (data_imgs.shape[2] == data_masks.shape[2])
@@ -467,9 +581,13 @@ def pred_only_FOV(data_imgs, data_masks, original_imgs_border_masks=None):
     for i in range(data_imgs.shape[0]):  # loop over the full images
         for x in range(width):
             for y in range(height):
-                # if inside_FOV_DRIVE(i, x, y, original_imgs_border_masks) == True:
-                new_pred_imgs.append(data_imgs[i, :, y, x])
-                new_pred_masks.append(data_masks[i, :, y, x])
+                if insideFOV:
+                    if inside_FOV(i, x, y, original_imgs_border_masks) == True:
+                        new_pred_imgs.append(data_imgs[i, :, y, x])
+                        new_pred_masks.append(data_masks[i, :, y, x])
+                else:
+                    new_pred_imgs.append(data_imgs[i, :, y, x])
+                    new_pred_masks.append(data_masks[i, :, y, x])
     new_pred_imgs = np.asarray(new_pred_imgs)
     new_pred_masks = np.asarray(new_pred_masks)
     new_pred_imgs = np.reshape(new_pred_imgs, (new_pred_imgs.shape[0]))
@@ -486,19 +604,19 @@ def kill_border(data, original_imgs_border_masks):
     for i in range(data.shape[0]):  # loop over the full images
         for x in range(width):
             for y in range(height):
-                if inside_FOV_DRIVE(i, x, y, original_imgs_border_masks) == False:
+                if inside_FOV(i, x, y, original_imgs_border_masks) == False:
                     data[i, :, y, x] = 0.0
 
 
-def inside_FOV_DRIVE(i, x, y, DRIVE_masks):
-    assert (len(DRIVE_masks.shape) == 4)  # 4D arrays
-    assert (DRIVE_masks.shape[1] == 1)  # DRIVE masks is black and white
+def inside_FOV(i, x, y, masks):
+    assert (len(masks.shape) == 4)  # 4D arrays
+    assert (masks.shape[1] == 1)  # DRIVE masks is black and white
     # DRIVE_masks = DRIVE_masks/255.  #NOOO!! otherwise with float numbers takes forever!!
 
-    if (x >= DRIVE_masks.shape[3] or y >= DRIVE_masks.shape[2]):  # my image bigger than the original
+    if (x >= masks.shape[3] or y >= masks.shape[2]):  # my image bigger than the original
         return False
 
-    if (DRIVE_masks[i, 0, y, x] > 0):  # 0==black pixels
+    if (masks[i, 0, y, x] > 0):  # 0==black pixels
         # print DRIVE_masks[i,0,y,x]  #verify it is working right
         return True
     else:

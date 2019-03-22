@@ -1,12 +1,9 @@
-from keras import backend as K
-from keras import regularizers
 from keras.layers import Input, merge, concatenate, Concatenate, Reshape, ZeroPadding2D, GlobalAvgPool2D, add
 from keras.layers.convolutional import Conv2D, Convolution2D, MaxPooling2D, UpSampling2D, \
     UpSampling2D, AveragePooling2D
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
-from keras.models import Sequential
 from utils.layers import ConvOffset2D
 from keras.optimizers import *
 
@@ -199,22 +196,12 @@ def build_deform_unet(inp_shape, downsize_nb_filters_factor=2, nb_pool=(2, 2), a
     conv19 = deform_block(int(64 / downsize_nb_filters_factor), conv18, name='conv19_offset')
 
     output = Conv2D(1, 1, padding='same', activation='sigmoid')(conv19)
-    if ass_crf:
-        from utils.crfrnn_layer import CrfRnnLayer
-        output = CrfRnnLayer(image_dims=(inp_shape[0], inp_shape[1]),
-                             num_classes=2,
-                             theta_alpha=160.,
-                             theta_beta=3.,
-                             theta_gamma=3.,
-                             num_iterations=10,
-                             name='crfrnn')([output, inputs])
-        model = Model(inputs, output)
-        # adam = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        # model.compile(optimizer=adam, loss=output.loss_function, metrics=[output.accuracy])
-    else:
-        model = Model(inputs, output)
+
+    model = Model(inputs, output)
     # adam = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    # model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='sgd', loss='binary_crossentropy', metrics=['accuracy'])
+
     return model
 
 
@@ -253,6 +240,7 @@ def build_deform_cnn(inp_shape, trainable=True):
     return model
 
 
+
 # paper impl: fully convolutional neural network based structured prediction approach towards the retinal vessel segmentation
 def build_2d_fcn_paper_model(inp_shape, k_size=3, downsize_nb_filters_factor=2):
     data = Input(shape=inp_shape)
@@ -289,6 +277,7 @@ def build_2d_fcn_paper_model(inp_shape, k_size=3, downsize_nb_filters_factor=2):
     model = Model(data, output)
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
     return model
+
 
 # paper R2U-Net impl
 def BuildR2UNet(inp_shape, k_size=3, nb_pool=(2, 2)):
@@ -361,7 +350,7 @@ def BuildR2UNet(inp_shape, k_size=3, nb_pool=(2, 2)):
     merged4 = concatenate([up4, rcl1], axis=merge_axis)
     rcl9 = RCL_block(64, merged4, pool=False)
 
-    convout = Conv2D(1, k_size, padding='same',activation='sigmoid')(rcl9)
+    convout = Conv2D(1, k_size, padding='same', activation='sigmoid')(rcl9)
     model = Model(data, convout)
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 

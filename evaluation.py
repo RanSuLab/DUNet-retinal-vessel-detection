@@ -1,3 +1,6 @@
+import matplotlib
+
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 # scikit learn
 from sklearn.metrics import roc_curve
@@ -18,47 +21,69 @@ config = configparser.ConfigParser()
 config.read('configuration.txt')
 # ===========================================
 # model name
+path_data = config.get('data paths', 'path_local')
+algorithm_config = config.get('experiment name', 'name')
+
 dataset = config.get('data attributes', 'dataset')
-name_experiment_list = ["deform", "unet", "deform_unet",]
-algorithms= ["Deformable-ConvNet", "U-Net", "DUNet"]
+name_experiment_list = ["deform_v1", "unet", "deform_unet_v1"]
+algorithms = ["Deformable-ConvNet", "U-Net", "DUNet"]
+test_border_masks = path_data + config.get('data paths', 'test_border_masks')
+test_border_masks = load_hdf5(test_border_masks)
 
 index = 0
 for name_experiment in name_experiment_list:
     algorithm = algorithms[index]
     path_experiment = './log/experiments/' + name_experiment + '/' + dataset + '/'
+    # if algorithm_config != name_experiment:
+    #     continue
     # ========== Elaborate and visualize the predicted images ====================
+
     pred_imgs = None
     orig_imgs = None
     gtruth_masks = None
     # apply the DRIVE masks on the repdictions #set everything outside the FOV to zero!!
     # kill_border(pred_imgs, test_border_masks)  #DRIVE MASK  #only for visualization
     ## back to original dimensions
-    file = h5py.File(path_experiment + dataset + '_predict_results.h5', 'r')
-    gtruth_masks = file['y_gt'][:]
-    pred_imgs = file['y_pred'][:]
-    orig_imgs = file['x_origin'][:]
-    file.close()
+    if dataset == 'HRF':
+        file = h5py.File(path_experiment + '0:15/' + dataset + '_predict_results.h5', 'r')
+        gtruth_masks = file['y_gt'][:]
+        pred_imgs = file['y_pred'][:]
+        orig_imgs = file['x_origin'][:]
+        file.close()
+        file = h5py.File(path_experiment + '15:30/' + dataset + '_predict_results.h5', 'r')
+        gtruth_masks = np.concatenate([gtruth_masks, file['y_gt'][:]], axis=0)
+        pred_imgs = np.concatenate([pred_imgs, file['y_pred'][:]], axis=0)
+        file.close()
+        gtruth_masks = np.where(gtruth_masks > 0, 1, 0)
+    else:
+        file = h5py.File(path_experiment + dataset + '_predict_results.h5', 'r')
+        gtruth_masks = file['y_gt'][:]
+        pred_imgs = file['y_pred'][:]
+        orig_imgs = file['x_origin'][:]
+        file.close()
 
     # ====== Evaluate the results
     print("\n\n========  Evaluate the results =======================")
     print('\n', name_experiment)
+    print(path_experiment)
     # predictions only inside the FOV
-    y_scores, y_true = pred_only_FOV(pred_imgs, gtruth_masks)  # returns data only inside the FOV
-    if np.max(y_true)>1:
-        y_true=y_true//np.max(y_true)
+    y_scores, y_true = pred_only_FOV(pred_imgs, gtruth_masks, test_border_masks,
+                                     insideFOV=True)  # returns data only inside the FOV
+    if np.max(y_true) > 1:
+        y_true = y_true // np.max(y_true)
     # Area under the ROC curve
     fpr, tpr, thresholds = roc_curve((y_true), y_scores)
     AUC_ROC = roc_auc_score(y_true, y_scores)
     # test_integral = np.trapz(tpr,fpr) #trapz is numpy integration
     print("\nArea under the ROC curve: " + str(AUC_ROC))
     # roc_curve = plt.figure()
-    plt.plot(fpr, tpr, '-',  label=algorithm + '_' + dataset + '(AUC = %0.4f)' % AUC_ROC)
-    plt.title('ROC curve',fontsize=13)
-    plt.xlabel("FPR (False Positive Rate)",fontsize=14)
-    plt.ylabel("TPR (True Positive Rate)",fontsize=14)
+    plt.plot(fpr, tpr, '-', label=algorithm + '_' + dataset + '(AUC = %0.4f)' % AUC_ROC)
+    plt.title('ROC curve', fontsize=14)
+    plt.xlabel("FPR (False Positive Rate)", fontsize=15)
+    plt.ylabel("TPR (True Positive Rate)", fontsize=15)
     plt.legend(loc="lower right")
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     # plt.savefig(path_experiment + "ROC.png")
 
     # Precision-recall curve
@@ -73,6 +98,8 @@ for name_experiment in name_experiment_list:
     # plt.xlabel("Recall")
     # plt.ylabel("Precision")
     # plt.legend(loc="lower right")
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
     # plt.savefig(path_experiment + "Precision_recall.png")
 
     # Confusion matrix
@@ -110,9 +137,8 @@ for name_experiment in name_experiment_list:
     # F1 score
     F1_score = f1_score(y_true, y_pred, labels=None, average='binary', sample_weight=None)
     print("\nF1 score (F-measure): " + str(F1_score))
-
     # Save the results
-    file_perf = open(path_experiment + 'performances.txt', 'w')
+    file_perf = open(path_experiment + 'performances_new.txt', 'w')
     file_perf.write("Area under the ROC curve: " + str(AUC_ROC)
                     + "\nArea under Precision-Recall curve: " + str(AUC_prec_rec)
                     + "\nJaccard similarity score: " + str(jaccard_index)
@@ -125,6 +151,9 @@ for name_experiment in name_experiment_list:
                     + "\nPRECISION: " + str(precision)
                     )
     file_perf.close()
+    # break
     index = index + 1
-plt.savefig('./log/experiments/' +dataset+ "_comparative_ROC.png")
+plt.savefig('./log/experiments/' + dataset + "_comparative_ROC.png")
+# plt.savefig('./log/experiments/' + dataset + "_Precision_recall.png")
+
 plt.show()
